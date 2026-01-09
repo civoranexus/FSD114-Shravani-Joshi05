@@ -1,0 +1,93 @@
+body {
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+/* BRAND SECTION */
+.brand {
+    background: linear-gradient(to right, #0f2027, #203a43, #2c5364);
+    color: blue;
+    text-align: center;
+    padding: 80px 20px;
+}
+
+.brand h1 {
+    font-size: 50px;
+    letter-spacing: 2px;
+}
+
+.tagline {
+    font-size: 18px;
+    margin-top: 10px;
+}
+
+/* ABOUT */
+.about {
+    background: #f4f6f8;
+    padding: 50px 30px;
+    text-align: center;
+}
+
+.about h2 {
+    color: #1a237e;
+}
+
+.about p {
+    max-width: 800px;
+    margin: auto;
+    font-size: 16px;
+}
+
+/* CONCEPT */
+.concept {
+    background: #fff3e0;
+    padding: 50px 20px;
+    text-align: center;
+}
+
+.concept h2 {
+    color: #e65100;
+}
+
+.concept-box {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.cbox {
+    background: white;
+    width: 230px;
+    margin: 15px;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+/* HIGHLIGHTS */
+.highlights {
+    background: #e8f5e9;
+    padding: 50px 20px;
+    text-align: center;
+}
+
+.highlights h2 {
+    color: #2e7d32;
+}
+
+.highlights ul {
+    list-style: none;
+    padding: 0;
+}
+
+.highlights li {
+    font-size: 16px;
+    margin: 10px 0;
+}
+
+/* FOOTER */
+footer {
+    background: #263238;
+    color: white;
+    text-align: center;
+    padding: 20px;
+}
