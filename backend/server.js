@@ -13,7 +13,7 @@ const db = mysql.createConnection({
     host: 'localhost',
     user: 'root',
     password: '',
-    database: 'eduvillage_db'
+    database: 'eduvillage'
 });
 
 db.connect(err => {
