@@ -1,145 +1,240 @@
-// server.js
-const express = require('express');
-const mysql = require('mysql2');
-const bodyParser = require('body-parser');
-const cors = require('cors');
+const express = require("express");
+const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const mysql = require("mysql2");
 
 const app = express();
-app.use(cors());            // Allow frontend requests
-app.use(bodyParser.json()); // Parse JSON requests
+const PORT = 3000;
 
-// MySQL connection
+app.use(cors());
+app.use(express.json());
+
+// ================= DATABASE =================
 const db = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'eduvillage'
+    host: "localhost",
+    user: "root",
+    password: "",
+    database: "eduvillage"
 });
 
 db.connect(err => {
-    if (err) console.log('DB Connection Error:', err);
-    else console.log('Connected to MySQL');
+    if (err) {
+        console.log("❌ DB Error:", err);
+    } else {
+        console.log("✅ MySQL Connected");
+    }
 });
 
-// ------------------- REGISTER -------------------
-app.post('/api/register/student', (req, res) => {
-    const { name, email, password, education_level, field_of_study } = req.body;
-    const query = 'INSERT INTO students (name,email,password,education_level,field_of_study) VALUES (?,?,?,?,?)';
-    db.query(query, [name, email, password, education_level, field_of_study], (err, result) => {
-        if (err) return res.json({ status: 'error', message: err });
-        res.json({ status: 'success' });
-    });
+// ================= STUDENT REGISTER =================
+app.post("/student/register", async (req, res) => {
+    const { name, email, password, education, field } = req.body;
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        db.query(
+            "INSERT INTO student (name, email, password, education, field) VALUES (?, ?, ?, ?, ?)",
+            [name, email, hashedPassword, education, field],
+            (err) => {
+                if (err) {
+                    console.log(err);
+                    return res.json({ success: false, message: "Student already exists" });
+                }
+                res.json({ success: true, message: "Student registered successfully" });
+            }
+        );
+    } catch (error) {
+        res.json({ success: false, message: "Server error" });
+    }
 });
 
-app.post('/api/register/teacher', (req, res) => {
+// ================= TEACHER REGISTER =================
+app.post("/teacher/register", async (req, res) => {
     const { name, email, password, subject } = req.body;
-    const query = 'INSERT INTO teachers (name,email,password,subject) VALUES (?,?,?,?)';
-    db.query(query, [name, email, password, subject], (err, result) => {
-        if (err) return res.json({ status: 'error', message: err });
-        res.json({ status: 'success' });
-    });
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        db.query(
+            "INSERT INTO teacher (name, email, password, subject) VALUES (?, ?, ?, ?)",
+            [name, email, hashedPassword, subject],
+            (err) => {
+                if (err) {
+                    console.log(err);
+                    return res.json({ success: false, message: "Teacher already exists" });
+                }
+                res.json({ success: true, message: "Teacher registered successfully" });
+            }
+        );
+    } catch (error) {
+        res.json({ success: false, message: "Server error" });
+    }
 });
 
-// ------------------- LOGIN -------------------
-app.post('/api/login/student', (req, res) => {
+// ================= STUDENT LOGIN =================
+app.post("/student/login", (req, res) => {
     const { email, password } = req.body;
-    const query = 'SELECT * FROM students WHERE email=? AND password=?';
-    db.query(query, [email, password], (err, results) => {
-        if (err) return res.json({ status: 'error', message: err });
-        if (results.length > 0) res.json({ status: 'success', user: results[0] });
-        else res.json({ status: 'error', message: 'Invalid Credentials' });
-    });
+
+    db.query(
+        "SELECT * FROM student WHERE email = ?",
+        [email],
+        async (err, result) => {
+            if (err || result.length === 0) {
+                return res.json({ success: false, message: "Student not found" });
+            }
+
+            const match = await bcrypt.compare(password, result[0].password);
+            if (!match) {
+                return res.json({ success: false, message: "Wrong password" });
+            }
+
+            res.json({
+                success: true,
+                student: {
+                  name: result[0].name,
+                  email: result[0].email
+                }
+           });
+
+        }
+    );
 });
 
-app.post('/api/login/teacher', (req, res) => {
+// ================= TEACHER LOGIN =================
+app.post("/teacher/login", (req, res) => {
     const { email, password } = req.body;
-    const query = 'SELECT * FROM teachers WHERE email=? AND password=?';
-    db.query(query, [email, password], (err, results) => {
-        if (err) return res.json({ status: 'error', message: err });
-        if (results.length > 0) res.json({ status: 'success', user: results[0] });
-        else res.json({ status: 'error', message: 'Invalid Credentials' });
-    });
+
+    db.query(
+        "SELECT * FROM teacher WHERE email = ?",
+        [email],
+        async (err, result) => {
+            if (err || result.length === 0) {
+                return res.json({ success: false, message: "Teacher not found" });
+            }
+
+            const match = await bcrypt.compare(password, result[0].password);
+            if (!match) {
+                return res.json({ success: false, message: "Wrong password" });
+            }
+
+            res.json({
+                success: true,
+                name: result[0].name,
+                email: result[0].email
+      });
+
+        }
+    );
 });
 
-// ------------------- DASHBOARD DATA -------------------
-// Student: profile, assignments, leaderboard
-app.get('/api/student/:id/profile', (req, res) => {
-    const id = req.params.id;
-    const query = 'SELECT id,name,email,education_level,field_of_study FROM students WHERE id=?';
-    db.query(query, [id], (err, results) => {
-        if (err) return res.json({ status: 'error', message: err });
-        res.json({ status: 'success', data: results[0] });
-    });
+app.listen(PORT, () => {
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
 
-app.get('/api/teacher/:id/profile', (req, res) => {
-    const id = req.params.id;
-    const query = 'SELECT id,name,email,subject FROM teachers WHERE id=?';
-    db.query(query, [id], (err, results) => {
-        if (err) return res.json({ status: 'error', message: err });
-        res.json({ status: 'success', data: results[0] });
-    });
+// ================= GET ALL STUDENTS =================
+app.get("/students", (req, res) => {
+    db.query(
+        "SELECT name, email FROM student",
+        (err, result) => {
+            if (err) {
+                console.log(err);
+                return res.json({ success: false });
+            }
+            res.json({ success: true, students: result });
+        }
+    );
 });
+// ================= ADD COURSE =================
+app.post("/course/add", (req, res) => {
+    const { course_name } = req.body;
 
-// Get all students (for teacher dashboard)
-app.get('/api/students', (req, res) => {
-    const query = 'SELECT id,name,email,education_level,field_of_study FROM students';
-    db.query(query, (err, results) => {
-        if (err) return res.json({ status: 'error', message: err });
-        res.json({ status: 'success', students: results });
-    });
+    db.query(
+        "INSERT INTO courses (course_name) VALUES (?)",
+        [course_name],
+        (err) => {
+            if (err) {
+                console.log(err);
+                return res.json({ success: false });
+            }
+            res.json({ success: true });
+        }
+    );
 });
-
-// Add course
-app.post('/api/course', (req, res) => {
-    const { teacher_id, name } = req.body;
-    const query = 'INSERT INTO courses (teacher_id,name) VALUES (?,?)';
-    db.query(query, [teacher_id, name], (err, result) => {
-        if (err) return res.json({ status: 'error', message: err });
-        res.json({ status: 'success' });
-    });
+// ================= GET COURSES =================
+app.get("/courses", (req, res) => {
+    db.query(
+        "SELECT * FROM courses",
+        (err, result) => {
+            if (err) {
+                console.log(err);
+                return res.json({ success: false });
+            }
+            res.json({ success: true, courses: result });
+        }
+    );
 });
+// ================= CREATE ASSIGNMENT =================
+app.post("/assignment/add", (req, res) => {
+    const { title, description, course_name, teacher_name } = req.body;
 
-// Add assignment
-app.post('/api/assignment', (req, res) => {
-    const { teacher_id, title, description } = req.body;
-    const query = 'INSERT INTO assignments (teacher_id,title,description) VALUES (?,?,?)';
-    db.query(query, [teacher_id, title, description], (err, result) => {
-        if (err) return res.json({ status: 'error', message: err });
-        res.json({ status: 'success' });
-    });
+    if(!teacher_name){
+        return res.json({ success:false, message:"Teacher not logged in" });
+    }
+
+    db.query(
+        "INSERT INTO assignments (title, description, course_name, teacher_name) VALUES (?, ?, ?, ?)",
+        [title, description, course_name, teacher_name],
+        (err) => {
+            if(err){
+                console.log(err);
+                return res.json({ success:false });
+            }
+            res.json({ success:true });
+        }
+    );
 });
+// ================= GET ASSIGNMENTS =================
+app.get("/assignments/:teacherName", (req, res) => {
+    const teacherName = req.params.teacherName;
 
-// Add notes
-app.post('/api/notes', (req, res) => {
-    const { teacher_id, content } = req.body;
-    const query = 'INSERT INTO notes (teacher_id,content) VALUES (?,?)';
-    db.query(query, [teacher_id, content], (err, result) => {
-        if (err) return res.json({ status: 'error', message: err });
-        res.json({ status: 'success' });
-    });
+    db.query(
+        "SELECT * FROM assignments WHERE teacher_name = ?",
+        [teacherName],
+        (err, result) => {
+            if(err){
+                console.log(err);
+                return res.json({ success:false });
+            }
+            res.json({ success:true, assignments: result });
+        }
+    );
 });
+// ================= SAVE NOTES =================
+app.post("/notes", (req, res) => {
+    const { teacherName, content } = req.body;
 
-// Get assignments for student
-app.get('/api/student/:id/assignments', (req, res) => {
-    const id = req.params.id;
-    const query = 'SELECT * FROM assignments';
-    db.query(query, (err, results) => {
-        if (err) return res.json({ status: 'error', message: err });
-        res.json({ status: 'success', assignments: results });
-    });
+    db.query(
+        "INSERT INTO notes (teacher_name, content) VALUES (?, ?)",
+        [teacherName, content],
+        (err) => {
+            if (err) {
+                console.log(err);
+                return res.json({ success: false });
+            }
+            res.json({ success: true });
+        }
+    );
 });
-
-// Add feedback
-app.post('/api/student/:id/feedback', (req, res) => {
-    const student_id = req.params.id;
-    const { message } = req.body;
-    const query = 'INSERT INTO feedback (student_id,message) VALUES (?,?)';
-    db.query(query, [student_id, message], (err, result) => {
-        if (err) return res.json({ status: 'error', message: err });
-        res.json({ status: 'success' });
-    });
+// ================= GET NOTES =================
+app.get("/notes", (req, res) => {
+    db.query(
+        "SELECT teacher_name, content, created_at FROM notes ORDER BY created_at DESC",
+        (err, result) => {
+            if (err) {
+                console.log(err);
+                return res.json({ success: false });
+            }
+            res.json({ success: true, notes: result });
+        }
+    );
 });
-
-// Start server
-app.listen(3000, () => console.log('Server running on http://localhost:3000'));
