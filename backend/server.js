@@ -9,7 +9,7 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// ================= DATABASE =================
+/* ================= DATABASE ================= */
 const db = mysql.createConnection({
     host: "localhost",
     user: "root",
@@ -25,55 +25,104 @@ db.connect(err => {
     }
 });
 
-// ================= STUDENT REGISTER =================
+/* ================= STUDENT REGISTER ================= */
 app.post("/student/register", async (req, res) => {
-    const { name, email, password, education, field } = req.body;
+    let { name, email, password, education, field } = req.body;
 
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
+    // ✅ sanitize inputs
+    name = name?.trim();
+    email = email?.trim().toLowerCase();
+    education = education?.trim();
+    field = field?.trim();
 
-        db.query(
-            "INSERT INTO student (name, email, password, education, field) VALUES (?, ?, ?, ?, ?)",
-            [name, email, hashedPassword, education, field],
-            (err) => {
-                if (err) {
-                    console.log(err);
-                    return res.json({ success: false, message: "Student already exists" });
-                }
-                res.json({ success: true, message: "Student registered successfully" });
-            }
-        );
-    } catch {
-        res.json({ success: false, message: "Server error" });
+    if (!name || !email || !password || !education || !field) {
+        return res.json({ success: false, message: "All fields are required" });
     }
+
+    db.query(
+        "SELECT id FROM student WHERE email = ?",
+        [email],
+        async (err, result) => {
+            if (err) {
+                console.log("SELECT ERROR:", err);
+                return res.json({ success: false, message: "Database error" });
+            }
+
+            if (result.length > 0) {
+                return res.json({ success: false, message: "Student already exists" });
+            }
+
+            const hashedPassword = await bcrypt.hash(password, 10);
+
+            db.query(
+                "INSERT INTO student (name, email, password, education, field) VALUES (?, ?, ?, ?, ?)",
+                [name, email, hashedPassword, education, field],
+                (err) => {
+                    if (err) {
+                        console.log("INSERT ERROR:", err);
+                        return res.json({ success: false, message: "Insert failed" });
+                    }
+
+                    res.json({
+                        success: true,
+                        message: "Student registered successfully"
+                    });
+                }
+            );
+        }
+    );
 });
 
-// ================= TEACHER REGISTER =================
+/* ================= TEACHER REGISTER ================= */
 app.post("/teacher/register", async (req, res) => {
-    const { name, email, password, subject } = req.body;
+    let { name, email, password, subject } = req.body;
 
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
+    name = name?.trim();
+    email = email?.trim().toLowerCase();
+    subject = subject?.trim();
 
-        db.query(
-            "INSERT INTO teacher (name, email, password, subject) VALUES (?, ?, ?, ?)",
-            [name, email, hashedPassword, subject],
-            (err) => {
-                if (err) {
-                    console.log(err);
-                    return res.json({ success: false, message: "Teacher already exists" });
-                }
-                res.json({ success: true, message: "Teacher registered successfully" });
-            }
-        );
-    } catch {
-        res.json({ success: false, message: "Server error" });
+    if (!name || !email || !password || !subject) {
+        return res.json({ success: false, message: "All fields are required" });
     }
+
+    db.query(
+        "SELECT id FROM teacher WHERE email = ?",
+        [email],
+        async (err, result) => {
+            if (err) {
+                console.log(err);
+                return res.json({ success: false, message: "Database error" });
+            }
+
+            if (result.length > 0) {
+                return res.json({ success: false, message: "Teacher already exists" });
+            }
+
+            const hashedPassword = await bcrypt.hash(password, 10);
+
+            db.query(
+                "INSERT INTO teacher (name, email, password, subject) VALUES (?, ?, ?, ?)",
+                [name, email, hashedPassword, subject],
+                (err) => {
+                    if (err) {
+                        console.log(err);
+                        return res.json({ success: false, message: "Insert failed" });
+                    }
+
+                    res.json({
+                        success: true,
+                        message: "Teacher registered successfully"
+                    });
+                }
+            );
+        }
+    );
 });
 
-// ================= STUDENT LOGIN =================
+/* ================= STUDENT LOGIN ================= */
 app.post("/student/login", (req, res) => {
-    const { email, password } = req.body;
+    const email = req.body.email?.trim().toLowerCase();
+    const password = req.body.password;
 
     db.query(
         "SELECT * FROM student WHERE email = ?",
@@ -99,9 +148,10 @@ app.post("/student/login", (req, res) => {
     );
 });
 
-// ================= TEACHER LOGIN =================
+/* ================= TEACHER LOGIN ================= */
 app.post("/teacher/login", (req, res) => {
-    const { email, password } = req.body;
+    const email = req.body.email?.trim().toLowerCase();
+    const password = req.body.password;
 
     db.query(
         "SELECT * FROM teacher WHERE email = ?",
@@ -125,14 +175,18 @@ app.post("/teacher/login", (req, res) => {
     );
 });
 
-// ================= ADD COURSE =================
+/* ================= COURSES ================= */
 app.post("/course/add", (req, res) => {
-    const { course_name } = req.body;
+    const course_name = req.body.course_name?.trim();
+
+    if (!course_name) {
+        return res.json({ success: false });
+    }
 
     db.query(
         "INSERT INTO courses (course_name) VALUES (?)",
         [course_name],
-        (err) => {
+        err => {
             if (err) {
                 console.log(err);
                 return res.json({ success: false });
@@ -142,32 +196,28 @@ app.post("/course/add", (req, res) => {
     );
 });
 
-// ================= GET COURSES =================
 app.get("/courses", (req, res) => {
-    db.query(
-        "SELECT * FROM courses",
-        (err, result) => {
-            if (err) {
-                console.log(err);
-                return res.json({ success: false });
-            }
-            res.json({ success: true, courses: result });
+    db.query("SELECT * FROM courses", (err, result) => {
+        if (err) {
+            console.log(err);
+            return res.json({ success: false });
         }
-    );
+        res.json({ success: true, courses: result });
+    });
 });
 
-// ================= CREATE ASSIGNMENT (TEACHER) =================
+/* ================= ASSIGNMENTS ================= */
 app.post("/assignment/add", (req, res) => {
     const { title, description, course_name, teacher_name } = req.body;
 
-    if (!teacher_name) {
-        return res.json({ success: false, message: "Teacher not logged in" });
+    if (!title || !course_name || !teacher_name) {
+        return res.json({ success: false });
     }
 
     db.query(
         "INSERT INTO assignments (title, description, course_name, teacher_name) VALUES (?, ?, ?, ?)",
         [title, description, course_name, teacher_name],
-        (err) => {
+        err => {
             if (err) {
                 console.log(err);
                 return res.json({ success: false });
@@ -177,13 +227,10 @@ app.post("/assignment/add", (req, res) => {
     );
 });
 
-// ================= GET ASSIGNMENTS (TEACHER) =================
 app.get("/assignments/:teacherName", (req, res) => {
-    const teacherName = req.params.teacherName;
-
     db.query(
         "SELECT * FROM assignments WHERE teacher_name = ?",
-        [teacherName],
+        [req.params.teacherName],
         (err, result) => {
             if (err) {
                 console.log(err);
@@ -194,7 +241,6 @@ app.get("/assignments/:teacherName", (req, res) => {
     );
 });
 
-// ================= GET ASSIGNMENTS (STUDENTS) ✅ NEW =================
 app.get("/assignments", (req, res) => {
     db.query(
         "SELECT title, description, course_name, teacher_name FROM assignments ORDER BY id DESC",
@@ -208,14 +254,19 @@ app.get("/assignments", (req, res) => {
     );
 });
 
-// ================= SAVE NOTES =================
+/* ================= NOTES ================= */
 app.post("/notes", (req, res) => {
-    const { teacherName, content } = req.body;
+    const teacherName = req.body.teacherName?.trim();
+    const content = req.body.content?.trim();
+
+    if (!teacherName || !content) {
+        return res.json({ success: false });
+    }
 
     db.query(
         "INSERT INTO notes (teacher_name, content) VALUES (?, ?)",
         [teacherName, content],
-        (err) => {
+        err => {
             if (err) {
                 console.log(err);
                 return res.json({ success: false });
@@ -225,7 +276,6 @@ app.post("/notes", (req, res) => {
     );
 });
 
-// ================= GET NOTES =================
 app.get("/notes", (req, res) => {
     db.query(
         "SELECT teacher_name, content, created_at FROM notes ORDER BY created_at DESC",
@@ -239,7 +289,7 @@ app.get("/notes", (req, res) => {
     );
 });
 
-// ================= GET STUDENTS =================
+/* ================= STUDENTS ================= */
 app.get("/students", (req, res) => {
     db.query(
         "SELECT name, email FROM student",
@@ -253,7 +303,7 @@ app.get("/students", (req, res) => {
     );
 });
 
-// ================= START SERVER =================
+/* ================= START SERVER ================= */
 app.listen(PORT, () => {
     console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
