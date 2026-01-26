@@ -241,18 +241,23 @@ app.get("/assignments/:teacherName", (req, res) => {
     );
 });
 
-app.get("/assignments", (req, res) => {
+// Get assignments by course
+app.get("/assignments/course/:courseName", (req, res) => {
+    const courseName = req.params.courseName;
+
     db.query(
-        "SELECT title, description, course_name, teacher_name FROM assignments ORDER BY id DESC",
+        "SELECT title, description, course_name, teacher_name FROM assignments WHERE course_name = ? ORDER BY id DESC",
+        [courseName],
         (err, result) => {
             if (err) {
                 console.log(err);
-                return res.json({ success: false });
+                return res.json({ success: false, message: "Error fetching assignments" });
             }
             res.json({ success: true, assignments: result });
         }
     );
 });
+
 
 /* ================= NOTES ================= */
 app.post("/notes", (req, res) => {
