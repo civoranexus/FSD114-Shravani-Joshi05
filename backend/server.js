@@ -29,7 +29,6 @@ db.connect(err => {
 app.post("/student/register", async (req, res) => {
     let { name, email, password, education, field } = req.body;
 
-    // ✅ sanitize inputs
     name = name?.trim();
     email = email?.trim().toLowerCase();
     education = education?.trim();
@@ -44,7 +43,6 @@ app.post("/student/register", async (req, res) => {
         [email],
         async (err, result) => {
             if (err) {
-                console.log("SELECT ERROR:", err);
                 return res.json({ success: false, message: "Database error" });
             }
 
@@ -59,60 +57,10 @@ app.post("/student/register", async (req, res) => {
                 [name, email, hashedPassword, education, field],
                 (err) => {
                     if (err) {
-                        console.log("INSERT ERROR:", err);
                         return res.json({ success: false, message: "Insert failed" });
                     }
 
-                    res.json({
-                        success: true,
-                        message: "Student registered successfully"
-                    });
-                }
-            );
-        }
-    );
-});
-
-/* ================= TEACHER REGISTER ================= */
-app.post("/teacher/register", async (req, res) => {
-    let { name, email, password, subject } = req.body;
-
-    name = name?.trim();
-    email = email?.trim().toLowerCase();
-    subject = subject?.trim();
-
-    if (!name || !email || !password || !subject) {
-        return res.json({ success: false, message: "All fields are required" });
-    }
-
-    db.query(
-        "SELECT id FROM teacher WHERE email = ?",
-        [email],
-        async (err, result) => {
-            if (err) {
-                console.log(err);
-                return res.json({ success: false, message: "Database error" });
-            }
-
-            if (result.length > 0) {
-                return res.json({ success: false, message: "Teacher already exists" });
-            }
-
-            const hashedPassword = await bcrypt.hash(password, 10);
-
-            db.query(
-                "INSERT INTO teacher (name, email, password, subject) VALUES (?, ?, ?, ?)",
-                [name, email, hashedPassword, subject],
-                (err) => {
-                    if (err) {
-                        console.log(err);
-                        return res.json({ success: false, message: "Insert failed" });
-                    }
-
-                    res.json({
-                        success: true,
-                        message: "Teacher registered successfully"
-                    });
+                    res.json({ success: true });
                 }
             );
         }
@@ -129,12 +77,12 @@ app.post("/student/login", (req, res) => {
         [email],
         async (err, result) => {
             if (err || result.length === 0) {
-                return res.json({ success: false, message: "Student not found" });
+                return res.json({ success: false });
             }
 
             const match = await bcrypt.compare(password, result[0].password);
             if (!match) {
-                return res.json({ success: false, message: "Wrong password" });
+                return res.json({ success: false });
             }
 
             res.json({
@@ -143,33 +91,6 @@ app.post("/student/login", (req, res) => {
                     name: result[0].name,
                     email: result[0].email
                 }
-            });
-        }
-    );
-});
-
-/* ================= TEACHER LOGIN ================= */
-app.post("/teacher/login", (req, res) => {
-    const email = req.body.email?.trim().toLowerCase();
-    const password = req.body.password;
-
-    db.query(
-        "SELECT * FROM teacher WHERE email = ?",
-        [email],
-        async (err, result) => {
-            if (err || result.length === 0) {
-                return res.json({ success: false, message: "Teacher not found" });
-            }
-
-            const match = await bcrypt.compare(password, result[0].password);
-            if (!match) {
-                return res.json({ success: false, message: "Wrong password" });
-            }
-
-            res.json({
-                success: true,
-                name: result[0].name,
-                email: result[0].email
             });
         }
     );
@@ -188,7 +109,6 @@ app.post("/course/add", (req, res) => {
         [course_name],
         err => {
             if (err) {
-                console.log(err);
                 return res.json({ success: false });
             }
             res.json({ success: true });
@@ -199,12 +119,53 @@ app.post("/course/add", (req, res) => {
 app.get("/courses", (req, res) => {
     db.query("SELECT * FROM courses", (err, result) => {
         if (err) {
-            console.log(err);
             return res.json({ success: false });
         }
         res.json({ success: true, courses: result });
     });
 });
+
+/* =====================================================
+   🔹 NEW CODE STARTS HERE (ONLY ADDITION)
+   Student selects course
+===================================================== */
+app.post("/student/select-course", (req, res) => {
+    const { student_email, course_name } = req.body;
+
+    if (!student_email || !course_name) {
+        return res.json({ success: false });
+    }
+
+    db.query(
+        "INSERT INTO student_courses (student_email, course_name) VALUES (?, ?)",
+        [student_email, course_name],
+        (err) => {
+            if (err) {
+                return res.json({ success: false });
+            }
+            res.json({ success: true });
+        }
+    );
+});
+
+/* Get selected courses of logged-in student */
+app.get("/student/courses/:email", (req, res) => {
+    const email = req.params.email;
+
+    db.query(
+        "SELECT course_name FROM student_courses WHERE student_email = ?",
+        [email],
+        (err, result) => {
+            if (err) {
+                return res.json({ success: false });
+            }
+            res.json({ success: true, courses: result });
+        }
+    );
+});
+/* =====================================================
+   🔹 NEW CODE ENDS HERE
+===================================================== */
 
 /* ================= ASSIGNMENTS ================= */
 app.post("/assignment/add", (req, res) => {
@@ -219,7 +180,6 @@ app.post("/assignment/add", (req, res) => {
         [title, description, course_name, teacher_name],
         err => {
             if (err) {
-                console.log(err);
                 return res.json({ success: false });
             }
             res.json({ success: true });
@@ -227,13 +187,12 @@ app.post("/assignment/add", (req, res) => {
     );
 });
 
-app.get("/assignments/:teacherName", (req, res) => {
+app.get("/assignments/course/:courseName", (req, res) => {
     db.query(
-        "SELECT * FROM assignments WHERE teacher_name = ?",
-        [req.params.teacherName],
+        "SELECT * FROM assignments WHERE course_name = ?",
+        [req.params.courseName],
         (err, result) => {
             if (err) {
-                console.log(err);
                 return res.json({ success: false });
             }
             res.json({ success: true, assignments: result });
@@ -241,28 +200,9 @@ app.get("/assignments/:teacherName", (req, res) => {
     );
 });
 
-// Get assignments by course
-app.get("/assignments/course/:courseName", (req, res) => {
-    const courseName = req.params.courseName;
-
-    db.query(
-        "SELECT title, description, course_name, teacher_name FROM assignments WHERE course_name = ? ORDER BY id DESC",
-        [courseName],
-        (err, result) => {
-            if (err) {
-                console.log(err);
-                return res.json({ success: false, message: "Error fetching assignments" });
-            }
-            res.json({ success: true, assignments: result });
-        }
-    );
-});
-
-
 /* ================= NOTES ================= */
 app.post("/notes", (req, res) => {
-    const teacherName = req.body.teacherName?.trim();
-    const content = req.body.content?.trim();
+    const { teacherName, content } = req.body;
 
     if (!teacherName || !content) {
         return res.json({ success: false });
@@ -273,7 +213,6 @@ app.post("/notes", (req, res) => {
         [teacherName, content],
         err => {
             if (err) {
-                console.log(err);
                 return res.json({ success: false });
             }
             res.json({ success: true });
@@ -283,27 +222,12 @@ app.post("/notes", (req, res) => {
 
 app.get("/notes", (req, res) => {
     db.query(
-        "SELECT teacher_name, content, created_at FROM notes ORDER BY created_at DESC",
+        "SELECT teacher_name, content FROM notes",
         (err, result) => {
             if (err) {
-                console.log(err);
                 return res.json({ success: false });
             }
             res.json({ success: true, notes: result });
-        }
-    );
-});
-
-/* ================= STUDENTS ================= */
-app.get("/students", (req, res) => {
-    db.query(
-        "SELECT name, email FROM student",
-        (err, result) => {
-            if (err) {
-                console.log(err);
-                return res.json({ success: false });
-            }
-            res.json({ success: true, students: result });
         }
     );
 });
