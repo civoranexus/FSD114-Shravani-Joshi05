@@ -97,6 +97,8 @@ app.post("/student/login", (req, res) => {
 });
 
 /* ================= COURSES ================= */
+
+/* Add new course (Teacher/Admin) */
 app.post("/course/add", (req, res) => {
     const course_name = req.body.course_name?.trim();
 
@@ -107,8 +109,9 @@ app.post("/course/add", (req, res) => {
     db.query(
         "INSERT INTO courses (course_name) VALUES (?)",
         [course_name],
-        err => {
+        (err) => {
             if (err) {
+                console.log(err);
                 return res.json({ success: false });
             }
             res.json({ success: true });
@@ -116,14 +119,87 @@ app.post("/course/add", (req, res) => {
     );
 });
 
+/* Get all courses (for dropdown) */
 app.get("/courses", (req, res) => {
     db.query("SELECT * FROM courses", (err, result) => {
         if (err) {
+            console.log(err);
             return res.json({ success: false });
         }
         res.json({ success: true, courses: result });
     });
 });
+
+/* ================= STUDENT ENROLL COURSE ================= */
+app.post("/student/select-course", (req, res) => {
+    const { student_email, course_name } = req.body;
+
+    if (!student_email || !course_name) {
+        return res.json({ success: false });
+    }
+
+    // 1️⃣ Get student_id from email
+    db.query(
+        "SELECT id FROM student WHERE email = ?",
+        [student_email],
+        (err, studentResult) => {
+            if (err || studentResult.length === 0) {
+                return res.json({ success: false });
+            }
+
+            const student_id = studentResult[0].id;
+
+            // 2️⃣ Get course_id from course_name
+            db.query(
+                "SELECT id FROM courses WHERE course_name = ?",
+                [course_name],
+                (err, courseResult) => {
+                    if (err || courseResult.length === 0) {
+                        return res.json({ success: false });
+                    }
+
+                    const course_id = courseResult[0].id;
+
+                    // 3️⃣ Insert into student_courses
+                    db.query(
+                        "INSERT INTO student_courses (student_id, course_id) VALUES (?, ?)",
+                        [student_id, course_id],
+                        (err) => {
+                            if (err) {
+                                console.log(err);
+                                return res.json({ success: false });
+                            }
+                            res.json({ success: true });
+                        }
+                    );
+                }
+            );
+        }
+    );
+});
+
+/* ================= GET STUDENT COURSES ================= */
+app.get("/student/courses/:email", (req, res) => {
+    const email = req.params.email;
+
+    const sql = `
+        SELECT c.course_name
+        FROM student_courses sc
+        JOIN student s ON sc.student_id = s.id
+        JOIN courses c ON sc.course_id = c.id
+        WHERE s.email = ?
+    `;
+
+    db.query(sql, [email], (err, result) => {
+        if (err) {
+            console.log(err);
+            return res.json({ success: false, courses: [] });
+        }
+        res.json({ success: true, courses: result });
+    });
+});
+
+
 
 /* =====================================================
    🔹 NEW CODE STARTS HERE (ONLY ADDITION)
