@@ -159,6 +159,56 @@ app.post("/teacher/login", (req, res) => {
     );
 });
 
+/* ================= ADD COURSE ================= */
+app.post("/course/add", (req, res) => {
+    const { course_name, teacher_id } = req.body;
+
+    if (!course_name || !teacher_id) {
+        return res.json({
+            success: false,
+            message: "Missing data"
+        });
+    }
+
+    // check if teacher already has a course
+    db.query(
+        "SELECT id FROM courses WHERE teacher_id = ?",
+        [teacher_id],
+        (err, result) => {
+            if (err) {
+                return res.json({
+                    success: false,
+                    message: "Database error"
+                });
+            }
+
+            if (result.length > 0) {
+                return res.json({
+                    success: false,
+                    message: "Course already added"
+                });
+            }
+
+            // insert course
+            db.query(
+                "INSERT INTO courses (course_name, teacher_id) VALUES (?, ?)",
+                [course_name, teacher_id],
+                err2 => {
+                    if (err2) {
+                        return res.json({
+                            success: false,
+                            message: "Insert failed"
+                        });
+                    }
+
+                    res.json({
+                        success: true
+                    });
+                }
+            );
+        }
+    );
+});
 
 /* ================= COURSES ================= */
 app.get("/courses", (req, res) => {
@@ -260,21 +310,55 @@ app.get("/student/courses/:email", (req, res) => {
 
 /* ================= ASSIGNMENTS ================= */
 app.post("/assignment/add", (req, res) => {
-    const { title, description, course_name, teacher_name } = req.body;
+    const { title, description, course_id, teacher_name } = req.body;
 
-    if (!title || !course_name || !teacher_name) {
-        return res.json({ success: false });
+    if (!title || !course_id || !teacher_name) {
+        return res.json({ success: false, message: "Missing data" });
     }
 
     db.query(
-        "INSERT INTO assignments (title, description, course_name, teacher_name) VALUES (?, ?, ?, ?)",
-        [title, description, course_name, teacher_name],
+        "INSERT INTO assignments (title, description, course_id, teacher_name) VALUES (?, ?, ?, ?)",
+        [title, description, course_id, teacher_name],
         err => {
-            if (err) return res.json({ success: false });
+            if (err) {
+                console.log(err);
+                return res.json({ success: false });
+            }
             res.json({ success: true });
         }
     );
 });
+
+/* ================= GET ASSIGNMENTS FOR STUDENT ================= */
+app.get("/assignments/student/:email", (req, res) => {
+    const email = req.params.email;
+
+    const sql = `
+        SELECT 
+            a.title,
+            a.description,
+            c.course_name,
+            a.teacher_name
+        FROM assignments a
+        JOIN courses c ON a.course_id = c.id
+        JOIN student_courses sc ON sc.course_id = c.id
+        JOIN student s ON sc.student_id = s.id
+        WHERE s.email = ?
+    `;
+
+    db.query(sql, [email], (err, result) => {
+        if (err) {
+            console.log(err);
+            return res.json({ success: false });
+        }
+
+        res.json({
+            success: true,
+            assignments: result
+        });
+    });
+});
+
 
 /* ================= NOTES ================= */
 app.post("/notes", (req, res) => {
@@ -299,6 +383,20 @@ app.get("/notes", (req, res) => {
         if (err) return res.json({ success: false });
         res.json({ success: true, notes: result });
     });
+});
+
+/* ================= GET ALL ASSIGNMENTS FOR STUDENT ================= */
+app.get("/assignments/student/:email", (req, res) => {
+    db.query(
+        "SELECT * FROM assignments",
+        (err, result) => {
+            if (err) {
+                console.log(err);
+                return res.json({ success: false });
+            }
+            res.json({ success: true, assignments: result });
+        }
+    );
 });
 
 /* ================= START SERVER ================= */
