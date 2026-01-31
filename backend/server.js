@@ -385,19 +385,7 @@ app.get("/notes", (req, res) => {
     });
 });
 
-/* ================= GET ALL ASSIGNMENTS FOR STUDENT ================= */
-app.get("/assignments/student/:email", (req, res) => {
-    db.query(
-        "SELECT * FROM assignments",
-        (err, result) => {
-            if (err) {
-                console.log(err);
-                return res.json({ success: false });
-            }
-            res.json({ success: true, assignments: result });
-        }
-    );
-});
+
 
 /* ================= START SERVER ================= */
 app.listen(PORT, () => {
