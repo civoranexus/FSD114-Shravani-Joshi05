@@ -247,12 +247,13 @@ app.post("/student/select-course", (req, res) => {
     }
 
     db.query(
-        "SELECT id FROM student WHERE email = ?",
-        [student_email],
-        (err, studentResult) => {
-            if (err || studentResult.length === 0) {
-                return res.json({ success: false, message: "Student not found" });
-            }
+    "SELECT id FROM student_courses WHERE student_id = ? AND course_id = ?",
+    [student_id, course_id],
+    (err, exist) => {
+        if (exist.length > 0) {
+            return res.json({ success: false, message: "Already enrolled" });
+        }
+
 
             const student_id = studentResult[0].id;
 
