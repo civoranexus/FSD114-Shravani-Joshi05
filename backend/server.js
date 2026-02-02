@@ -240,49 +240,42 @@ app.get("/courses/teacher/:teacherId", (req, res) => {
 
 /* ================= STUDENT ENROLL COURSE (USING IDs) ================= */
 app.post("/student/select-course", (req, res) => {
-    const { student_email, course_name } = req.body;
+    const { student_email, course_id } = req.body;
 
-    if (!student_email || !course_name) {
+    if (!student_email || !course_id) {
         return res.json({ success: false, message: "Missing data" });
     }
 
+    // 1️⃣ Get student ID from email
     db.query(
-    "SELECT id FROM student_courses WHERE student_id = ? AND course_id = ?",
-    [student_id, course_id],
-    (err, exist) => {
-        if (exist.length > 0) {
-            return res.json({ success: false, message: "Already enrolled" });
-        }
-
+        "SELECT id FROM student WHERE email = ?",
+        [student_email],
+        (err, studentResult) => {
+            if (err || studentResult.length === 0) {
+                return res.json({ success: false, message: "Student not found" });
+            }
 
             const student_id = studentResult[0].id;
 
+            // 2️⃣ Check if already enrolled
             db.query(
-                "SELECT id FROM courses WHERE course_name = ?",
-                [course_name],
-                (err, courseResult) => {
-                    if (err || courseResult.length === 0) {
-                        return res.json({ success: false, message: "Course not found" });
+                "SELECT id FROM student_courses WHERE student_id = ? AND course_id = ?",
+                [student_id, course_id],
+                (err, exist) => {
+                    if (exist.length > 0) {
+                        return res.json({ success: false, message: "Already enrolled" });
                     }
 
-                    const course_id = courseResult[0].id;
-
+                    // 3️⃣ Insert enrollment
                     db.query(
-                        "SELECT id FROM student_courses WHERE student_id = ? AND course_id = ?",
+                        "INSERT INTO student_courses (student_id, course_id) VALUES (?, ?)",
                         [student_id, course_id],
-                        (err, exist) => {
-                            if (exist.length > 0) {
-                                return res.json({ success: false, message: "Already enrolled" });
+                        err => {
+                            if (err) {
+                                console.log(err);
+                                return res.json({ success: false });
                             }
-
-                            db.query(
-                                "INSERT INTO student_courses (student_id, course_id) VALUES (?, ?)",
-                                [student_id, course_id],
-                                err => {
-                                    if (err) return res.json({ success: false });
-                                    res.json({ success: true });
-                                }
-                            );
+                            res.json({ success: true });
                         }
                     );
                 }
@@ -290,7 +283,6 @@ app.post("/student/select-course", (req, res) => {
         }
     );
 });
-
 /* ================= GET STUDENT COURSES ================= */
 app.get("/student/courses/:email", (req, res) => {
     const email = req.params.email;
@@ -340,10 +332,10 @@ app.get("/assignments/student/:email", (req, res) => {
             a.description,
             c.course_name,
             a.teacher_name
-        FROM assignments a
+        FROM student s
+        JOIN student_courses sc ON s.id = sc.student_id
+        JOIN assignments a ON sc.course_id = a.course_id
         JOIN courses c ON a.course_id = c.id
-        JOIN student_courses sc ON sc.course_id = c.id
-        JOIN student s ON sc.student_id = s.id
         WHERE s.email = ?
     `;
 
@@ -359,8 +351,6 @@ app.get("/assignments/student/:email", (req, res) => {
         });
     });
 });
-
-
 /* ================= NOTES ================= */
 app.post("/notes", (req, res) => {
     const { teacherName, content } = req.body;
