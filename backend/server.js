@@ -376,6 +376,39 @@ app.get("/notes", (req, res) => {
     });
 });
 
+/* ================= SUBMIT ASSIGNMENT ================= */
+app.post("/assignment/submit", (req, res) => {
+    const { assignment_id, student_email, submission_text } = req.body;
+
+    if (!assignment_id || !student_email || !submission_text) {
+        return res.json({ success: false, message: "Missing data" });
+    }
+
+    // get student id
+    db.query(
+        "SELECT id FROM student WHERE email = ?",
+        [student_email],
+        (err, student) => {
+            if (err || student.length === 0) {
+                return res.json({ success: false });
+            }
+
+            const student_id = student[0].id;
+
+            db.query(
+                "INSERT INTO assignment_submissions (assignment_id, student_id, submission_text) VALUES (?, ?, ?)",
+                [assignment_id, student_id, submission_text],
+                err2 => {
+                    if (err2) {
+                        console.log(err2);
+                        return res.json({ success: false });
+                    }
+                    res.json({ success: true });
+                }
+            );
+        }
+    );
+});
 
 
 /* ================= START SERVER ================= */
