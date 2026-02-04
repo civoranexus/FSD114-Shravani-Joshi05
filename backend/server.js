@@ -160,56 +160,62 @@ app.post("/teacher/login", (req, res) => {
 });
 
 /* ================= ADD COURSE ================= */
+/* ================= ADD COURSE ================= */
 app.post("/course/add", (req, res) => {
     const { course_name, teacher_id } = req.body;
 
+    // 1. Validate Input
     if (!course_name || !teacher_id) {
         return res.json({
             success: false,
-            message: "Missing data"
+            message: "Missing data: Course Name or Teacher ID"
         });
     }
 
-    // check if teacher already has a course
+    // 2. Check if teacher already has a course
     db.query(
         "SELECT id FROM courses WHERE teacher_id = ?",
         [teacher_id],
         (err, result) => {
             if (err) {
+                console.error("❌ DB Check Error:", err);
                 return res.json({
                     success: false,
-                    message: "Database error"
+                    message: "Database error checking course"
                 });
             }
 
             if (result.length > 0) {
                 return res.json({
                     success: false,
-                    message: "Course already added"
+                    message: "You have already added a course!"
                 });
             }
 
-            // insert course
+            // 3. Insert Course
             db.query(
                 "INSERT INTO courses (course_name, teacher_id) VALUES (?, ?)",
                 [course_name, teacher_id],
                 err2 => {
                     if (err2) {
+                        // THIS LOGS THE ERROR IN YOUR TERMINAL
+                        console.error("❌ SQL INSERT ERROR:", err2);
+                        
                         return res.json({
                             success: false,
-                            message: "Insert failed"
+                            message: "Insert failed: " + err2.sqlMessage
                         });
                     }
 
                     res.json({
-                        success: true
+                        success: true,
+                        message: "Course added successfully"
                     });
                 }
             );
         }
     );
 });
-
 /* ================= COURSES ================= */
 app.get("/courses", (req, res) => {
     db.query("SELECT * FROM courses", (err, result) => {
@@ -322,33 +328,53 @@ app.post("/assignment/add", (req, res) => {
     );
 });
 
-/* ================= GET ASSIGNMENTS FOR STUDENT ================= */
+/* ================= MARK ASSIGNMENT COMPLETE ================= */
+app.post("/assignment/complete", (req, res) => {
+    const { student_email, assignment_id } = req.body;
+
+    if (!student_email || !assignment_id) {
+        return res.json({ success: false, message: "Missing data" });
+    }
+
+    const query = "INSERT INTO assignment_completions (student_email, assignment_id) VALUES (?, ?)";
+
+    db.query(query, [student_email, assignment_id], (err) => {
+        if (err) {
+            // If error code is 1062, it means duplicate entry (already completed)
+            if (err.errno === 1062) {
+                return res.json({ success: false, message: "Already completed" });
+            }
+            console.error(err);
+            return res.json({ success: false, message: "Server error" });
+        }
+        res.json({ success: true, message: "Assignment marked as completed!" });
+    });
+});
+
+/* ================= CHECK COMPLETED STATUS ================= */
+// We update the existing GET assignments route to include completion status
 app.get("/assignments/student/:email", (req, res) => {
     const email = req.params.email;
 
     const sql = `
         SELECT 
-            a.title,
-            a.description,
-            c.course_name,
-            a.teacher_name
+            a.id, 
+            a.title, 
+            a.description, 
+            c.course_name, 
+            a.teacher_name,
+            CASE WHEN ac.id IS NOT NULL THEN 1 ELSE 0 END AS is_completed
         FROM student s
         JOIN student_courses sc ON s.id = sc.student_id
         JOIN assignments a ON sc.course_id = a.course_id
         JOIN courses c ON a.course_id = c.id
+        LEFT JOIN assignment_completions ac ON a.id = ac.assignment_id AND ac.student_email = s.email
         WHERE s.email = ?
     `;
 
     db.query(sql, [email], (err, result) => {
-        if (err) {
-            console.log(err);
-            return res.json({ success: false });
-        }
-
-        res.json({
-            success: true,
-            assignments: result
-        });
+        if (err) return res.json({ success: false });
+        res.json({ success: true, assignments: result });
     });
 });
 /* ================= NOTES ================= */
@@ -409,8 +435,81 @@ app.post("/assignment/submit", (req, res) => {
         }
     );
 });
+/* ================= VIEW SUBMISSIONS (TEACHER) ================= */
+app.get("/assignment/submissions/:teacherName", (req, res) => {
+    const teacherName = req.params.teacherName;
 
+    const sql = `
+        SELECT 
+            a.title,
+            s.name AS student_name,
+            s.email,
+            sub.submission_text,
+            sub.submitted_at
+        FROM assignments a
+        JOIN assignment_submissions sub ON a.id = sub.assignment_id
+        JOIN student s ON sub.student_id = s.id
+        WHERE a.teacher_name = ?
+        ORDER BY sub.submitted_at DESC
+    `;
 
+    db.query(sql, [teacherName], (err, result) => {
+        if (err) {
+            console.log(err);
+            return res.json({ success: false });
+        }
+
+        res.json({
+            success: true,
+            submissions: result
+        });
+    });
+});
+/* ================= GET STUDENTS FOR TEACHER ================= */
+app.get("/students/teacher/:teacherId", (req, res) => {
+    const teacherId = req.params.teacherId;
+
+    const sql = `
+        SELECT 
+            s.name AS student_name, 
+            s.email, 
+            c.course_name
+        FROM student s
+        JOIN student_courses sc ON s.id = sc.student_id
+        JOIN courses c ON sc.course_id = c.id
+        WHERE c.teacher_id = ?
+        ORDER BY c.course_name, s.name
+    `;
+
+    db.query(sql, [teacherId], (err, result) => {
+        if (err) {
+            console.error("SQL Error:", err);
+            return res.json({ success: false });
+        }
+        res.json({ success: true, students: result });
+    });
+});
+
+/* ================= LEADERBOARD API ================= */
+app.get("/leaderboard", (req, res) => {
+    // Counts completed assignments for each student
+    const sql = `
+        SELECT s.name, COUNT(ac.id) as score
+        FROM student s
+        JOIN assignment_completions ac ON s.email = ac.student_email
+        GROUP BY s.email, s.name
+        ORDER BY score DESC
+        LIMIT 10
+    `;
+
+    db.query(sql, (err, result) => {
+        if (err) {
+            console.error("Leaderboard Error:", err);
+            return res.json({ success: false });
+        }
+        res.json({ success: true, leaderboard: result });
+    });
+});
 /* ================= START SERVER ================= */
 app.listen(PORT, () => {
     console.log(`🚀 Server running at http://localhost:${PORT}`);
