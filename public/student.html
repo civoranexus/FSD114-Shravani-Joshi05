@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>EduVillage | Student Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family: Arial, sans-serif;}
+body{display:flex;height:100vh;background: linear-gradient(135deg, #6e45e2, #88d3ce);}
+.sidebar{width:240px;background: #472e9f;color:white;padding:20px;}
+.sidebar h2{text-align:center;margin-bottom:30px;font-family: "Lucida Handwriting";}
+.sidebar button{width:100%;padding:12px;margin:6px 0;border:none;background:#755dca;color:black;cursor:pointer;text-align:left;border-radius:5px;transition:0.3s;}
+.sidebar button:hover{background:#2a165f;color:white;}
+.sidebar button.active-btn{background:#2a165f;color:white;}
+.main{flex:1;padding:30px;overflow-y:auto;}
+.section{display:none;background: linear-gradient(135deg, #baa9c5, #88d3ce);padding:20px;border-radius:10px;box-shadow:0 4px 10px rgba(0,0,0,0.2);}
+.section.active{display:block;}
+select, button{padding:8px;border-radius:5px;margin-top:8px;}
+h2{margin-bottom:10px;}
+</style>
+</head>
+
+<body>
+<div class="sidebar">
+    <h2>EduVillage</h2>
+
+    <button onclick="showSection('profile')" id="btn-profile">Profile</button>
+
+    <button onclick="showSection('courses'); loadCourses(); loadMyCourses();" id="btn-courses">
+        Courses
+    </button>
+
+    <!-- ✅ ASSIGNMENTS BUTTON -->
+    <button onclick="openAssignments()" id="btn-assignment">Assignments</button>
+
+    <button onclick="showSection('notes')" id="btn-notes">Notes</button>
+    <button onclick="showSection('leaderboard')" id="btn-leaderboard">Leaderboard</button>
+    <button onclick="logout()">Logout</button>
+</div>
+
+<div class="main">
+
+<!-- PROFILE -->
+<div id="profile" class="section active">
+    <h2>Student Profile</h2>
+    <p><b>Name:</b> <span id="studentName"></span></p>
+    <p><b>Email:</b> <span id="studentEmail"></span></p>
+</div>
+
+<!-- COURSES (NEW) -->
+<div id="courses" class="section">
+    <h2>Select Course</h2>
+
+    <select id="courseDropdown">
+        <option value="">-- Select Course --</option>
+    </select>
+    <br><br>
+    <button onclick="selectCourse()">Enroll</button>
+
+    <h3 style="margin-top:15px;">My Courses</h3>
+    <ul id="myCourses"></ul>
+</div>
+
+<!-- ASSIGNMENTS -->
+<div id="assignment" class="section">
+    <h2>Assignments</h2>
+    <ul id="assignmentList"></ul>
+</div>
+
+<!-- NOTES -->
+<div id="notes" class="section">
+    <h2>Notes</h2>
+    <ul id="notesList"></ul>
+</div>
+
+<!-- LEADERBOARD -->
+<div id="leaderboard" class="section">
+    <h2>Leaderboard</h2>
+    <ol id="leaderboardList"></ol>
+</div>
+
+</div>
+<script>
+
+/* ================= SECTION SWITCH ================= */
+function showSection(id){
+    document.querySelectorAll('.section').forEach(sec =>
+        sec.classList.remove('active')
+    );
+    document.getElementById(id).classList.add('active');
+
+    document.querySelectorAll('.sidebar button').forEach(btn =>
+        btn.classList.remove('active-btn')
+    );
+    const btn = document.getElementById("btn-" + id);
+    if(btn) btn.classList.add('active-btn');
+}
+
+/* ================= OPEN ASSIGNMENTS ================= */
+function openAssignments() {
+    showSection('assignment');
+    loadAssignments();
+}
+
+/* ================= LOAD STUDENT INFO ================= */
+const studentName = localStorage.getItem("studentName") || "Student";
+const studentEmail = localStorage.getItem("studentEmail") || "";
+
+document.getElementById("studentName").innerText = studentName;
+document.getElementById("studentEmail").innerText = studentEmail;
+
+/* ================= LOAD ALL COURSES ================= */
+/* ================= UPDATED LOAD ALL COURSES ================= */
+async function loadCourses() {
+    const res = await fetch("http://localhost:3000/courses");
+    const data = await res.json();
+
+    const dropdown = document.getElementById("courseDropdown");
+    dropdown.innerHTML = `<option value="">-- Select Course --</option>`;
+
+    if(data.success){
+        data.courses.forEach(c => {
+            const option = document.createElement("option");
+            // ✅ FIX: Set value to ID, not Name
+            option.value = c.id;       
+            option.textContent = c.course_name;
+            dropdown.appendChild(option);
+        });
+    }
+}
+
+/* ================= SELECT COURSE ================= */
+/* ================= UPDATED SELECT COURSE ================= */
+async function selectCourse() {
+    const courseId = document.getElementById("courseDropdown").value;
+
+    if (!studentEmail) return alert("Student not logged in");
+    if (!courseId) return alert("Please select a course");
+
+    const res = await fetch("http://localhost:3000/student/select-course", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            student_email: studentEmail,
+            // ✅ FIX: Send 'course_id' to match server.js
+            course_id: courseId  
+        })
+    });
+
+    const data = await res.json();
+    if (data.success) {
+        alert("Course enrolled successfully");
+        loadMyCourses(); // Refresh the list
+    } else {
+        alert(data.message || "Enrollment failed");
+    }
+}
+
+/* ================= LOAD MY COURSES ================= */
+async function loadMyCourses(){
+    const ul = document.getElementById("myCourses");
+    ul.innerHTML = "";
+
+    const res = await fetch(`http://localhost:3000/student/courses/${studentEmail}`);
+    const data = await res.json();
+
+    if(data.success && data.courses.length > 0){
+        data.courses.forEach(c => {
+            const li = document.createElement("li");
+            li.textContent = c.course_name;
+            ul.appendChild(li);
+        });
+    } else {
+        ul.innerHTML = "<li>No courses selected</li>";
+    }
+}
+
+/* ================= LOAD ASSIGNMENTS ================= */
+/* ================= UPDATED LOAD ASSIGNMENTS ================= */
+async function loadAssignments() {
+    const ul = document.getElementById("assignmentList");
+    ul.innerHTML = "<li>Loading...</li>";
+
+    const res = await fetch(`http://localhost:3000/assignments/student/${studentEmail}`);
+    const data = await res.json();
+
+    ul.innerHTML = "";
+
+    if (data.success && data.assignments.length > 0) {
+        data.assignments.forEach(a => {
+            const li = document.createElement("li");
+
+            // Check if completed
+            const isDone = a.is_completed === 1;
+            const btnText = isDone ? "✅ Completed" : "Mark as Completed";
+            const btnClass = isDone ? "disabled-btn" : "";
+            const disabledAttr = isDone ? "disabled" : "";
+
+            li.innerHTML = `
+                <b>${a.title}</b><br>
+                ${a.description || ""}<br>
+                <small>${a.course_name} | ${a.teacher_name}</small><br>
+                <button 
+                    onclick="markComplete(${a.id}, this)" 
+                    class="${btnClass}" 
+                    ${disabledAttr}
+                    style="margin-top:5px; background:${isDone ? '#ccc' : '#28a745'}; color:white; border:none; cursor:${isDone ? 'default' : 'pointer'};"
+                >
+                    ${btnText}
+                </button>
+                <hr>
+            `;
+            ul.appendChild(li);
+        });
+    } else {
+        ul.innerHTML = "<li>No assignments available</li>";
+    }
+}
+
+/* ================= NEW FUNCTION: MARK COMPLETE ================= */
+async function markComplete(assignmentId, btn) {
+    if (!confirm("Mark this assignment as completed?")) return;
+
+    const res = await fetch("http://localhost:3000/assignment/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            student_email: studentEmail,
+            assignment_id: assignmentId
+        })
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+        alert("Great job!");
+        // Update button UI immediately without reloading
+        btn.innerText = "✅ Completed";
+        btn.style.background = "#ccc";
+        btn.style.cursor = "default";
+        btn.disabled = true;
+    } else {
+        alert(data.message || "Error updating status");
+    }
+}
+/* ================= UPDATED LOAD NOTES (FILTERED) ================= */
+/* ================= LOAD NOTES (CARD FORMAT) ================= */
+/* ================= LOAD NOTES (FINAL FIX) ================= */
+async function loadNotes() {
+    const ul = document.getElementById("notesList");
+    
+    // 1. Reset UI
+    ul.innerHTML = "<p>Loading notes from server...</p>";
+    ul.style.listStyle = "none"; 
+    ul.style.padding = "0";
+
+    try {
+        // 2. Fetch from FULL Localhost URL
+        // (We use studentEmail variable which must be defined at top of script)
+        if (!studentEmail) {
+            ul.innerHTML = "<p style='color: red;'>Error: Not logged in.</p>";
+            return;
+        }
+
+        const res = await fetch(`http://localhost:3000/notes/student/${studentEmail}`);
+        
+        // 3. Check if Server Responded
+        if (!res.ok) {
+            throw new Error(`Server Error: ${res.status}`);
+        }
+
+        const data = await res.json();
+        ul.innerHTML = ""; // Clear "Loading..." text
+        
+        // 4. Show Notes or "Empty" Message
+        if (data.success && data.notes.length > 0) {
+            data.notes.forEach(n => {
+                const li = document.createElement("li");
+                
+                // Card Design
+                li.innerHTML = `
+                    <div style="
+                        background: white; 
+                        padding: 25px; 
+                        border-radius: 10px; 
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+                        margin-bottom: 20px; 
+                        border: 1px solid #ddd;
+                    ">
+                        <h3 style="
+                            color: #482ff7; 
+                            margin-top: 0; 
+                            margin-bottom: 10px; 
+                            border-bottom: 1px solid #eee; 
+                            padding-bottom: 10px;
+                        ">${n.description || "Untitled Note"}</h3>
+
+                        <div style="color: #333; line-height: 1.6; white-space: pre-wrap;">${n.content}</div>
+
+                        <div style="margin-top: 15px; font-size: 0.85em; color: #777; text-align: right;">
+                            Teacher: <b>${n.teacher_name}</b> | Course: ${n.course_name}
+                        </div>
+                    </div>
+                `;
+                ul.appendChild(li);
+            });
+        } else {
+            ul.innerHTML = "<p style='color: white;'>No notes found. (Did you enroll in the course?)</p>";
+        }
+
+    } catch (err) {
+        console.error(err);
+        // This will tell you EXACTLY why it failed on screen
+        ul.innerHTML = `<p style='color: yellow; background: red; padding: 10px;'>Connection Failed: Is the server running?</p>`;
+    }
+}
+/* ================= LEADERBOARD ================= */
+/* ================= UPDATED LEADERBOARD ================= */
+async function loadLeaderboard() {
+    const list = document.getElementById("leaderboardList");
+    list.innerHTML = "<li>Loading rankings...</li>";
+
+    try {
+        const res = await fetch("http://localhost:3000/leaderboard");
+        const data = await res.json();
+
+        list.innerHTML = "";
+
+        if (data.success && data.leaderboard.length > 0) {
+            data.leaderboard.forEach((l, index) => {
+                const li = document.createElement("li");
+                
+                // Add medal emojis for top 3
+                let medal = "";
+                if (index === 0) medal = "🥇 ";
+                else if (index === 1) medal = "🥈 ";
+                else if (index === 2) medal = "🥉 ";
+
+                li.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #ccc;">
+                        <span>${medal} <b>${l.name}</b></span>
+                        <span style="color:#2a165f; font-weight:bold;">${l.score} assignments</span>
+                    </div>
+                `;
+                list.appendChild(li);
+            });
+        } else {
+            list.innerHTML = "<li>No completions yet. Be the first!</li>";
+        }
+    } catch (err) {
+        console.error(err);
+        list.innerHTML = "<li>Error loading leaderboard</li>";
+    }
+}
+
+/* ================= LOGOUT ================= */
+function logout(){
+    window.location.href="login_register.html";
+}
+
+/* ================= INIT ================= */
+window.onload = () => {
+    loadCourses();
+    loadMyCourses();
+    loadNotes();
+    loadLeaderboard();
+};
+</script>
