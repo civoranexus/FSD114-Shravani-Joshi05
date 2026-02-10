@@ -1,0 +1,540 @@
+const express = require("express");
+const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const mysql = require("mysql2");
+
+const app = express();
+const PORT = 3000;
+
+app.use(cors());
+app.use(express.json());
+
+/* ================= DATABASE ================= */
+const db = mysql.createConnection({
+    host: "localhost",
+    user: "root",
+    password: "",
+    database: "eduvillage"
+});
+
+db.connect(err => {
+    if (err) {
+        console.log("❌ DB Error:", err);
+    } else {
+        console.log("✅ MySQL Connected");
+    }
+});
+
+/* ================= STUDENT REGISTER ================= */
+app.post("/student/register", async (req, res) => {
+    let { name, email, password, education, field } = req.body;
+
+    name = name?.trim();
+    email = email?.trim().toLowerCase();
+    education = education?.trim();
+    field = field?.trim();
+
+    if (!name || !email || !password || !education || !field) {
+        return res.json({ success: false, message: "All fields are required" });
+    }
+
+    db.query(
+        "SELECT id FROM student WHERE email = ?",
+        [email],
+        async (err, result) => {
+            if (err) return res.json({ success: false });
+
+            if (result.length > 0) {
+                return res.json({ success: false, message: "Student already exists" });
+            }
+
+            const hashedPassword = await bcrypt.hash(password, 10);
+
+            db.query(
+                "INSERT INTO student (name, email, password, education, field) VALUES (?, ?, ?, ?, ?)",
+                [name, email, hashedPassword, education, field],
+                err => {
+                    if (err) return res.json({ success: false });
+                    res.json({ success: true });
+                }
+            );
+        }
+    );
+});
+
+/* ================= STUDENT LOGIN ================= */
+app.post("/student/login", (req, res) => {
+    const email = req.body.email?.trim().toLowerCase();
+    const password = req.body.password;
+
+    db.query(
+        "SELECT * FROM student WHERE email = ?",
+        [email],
+        async (err, result) => {
+            if (err || result.length === 0) {
+                return res.json({ success: false });
+            }
+
+            const match = await bcrypt.compare(password, result[0].password);
+            if (!match) return res.json({ success: false });
+
+            res.json({
+                success: true,
+                student: {
+                    name: result[0].name,
+                    email: result[0].email
+                }
+            });
+        }
+    );
+});
+
+/* ================= TEACHER REGISTER ================= */
+app.post("/teacher/register", async (req, res) => {
+    let { name, email, password } = req.body;
+
+    name = name?.trim();
+    email = email?.trim().toLowerCase();
+
+    if (!name || !email || !password) {
+        return res.json({ success: false, message: "All fields required" });
+    }
+
+    db.query(
+        "SELECT id FROM teacher WHERE email = ?",
+        [email],
+        async (err, result) => {
+            if (err) return res.json({ success: false });
+
+            if (result.length > 0) {
+                return res.json({ success: false, message: "Teacher already exists" });
+            }
+
+            const hashedPassword = await bcrypt.hash(password, 10);
+
+            db.query(
+                "INSERT INTO teacher (name, email, password) VALUES (?, ?, ?)",
+                [name, email, hashedPassword],
+                err => {
+                    if (err) return res.json({ success: false });
+                    res.json({ success: true });
+                }
+            );
+        }
+    );
+});
+
+/* ================= TEACHER LOGIN ================= */
+app.post("/teacher/login", (req, res) => {
+    const email = req.body.email?.trim().toLowerCase();
+    const password = req.body.password;
+
+    if (!email || !password) {
+        return res.json({ success: false, message: "Missing credentials" });
+    }
+
+    db.query(
+        "SELECT * FROM teacher WHERE email = ?",
+        [email],
+        async (err, result) => {
+            if (err || result.length === 0) {
+                return res.json({ success: false, message: "Teacher not found" });
+            }
+
+            const match = await bcrypt.compare(password, result[0].password);
+            if (!match) {
+                return res.json({ success: false, message: "Invalid password" });
+            }
+
+            // ✅ SUCCESS RESPONSE
+            res.json({
+                success: true,
+                teacher: {
+                    id: result[0].id,
+                    name: result[0].name,
+                    email: result[0].email
+                }
+            });
+        }
+    );
+});
+
+/* ================= ADD COURSE ================= */
+/* ================= ADD COURSE ================= */
+app.post("/course/add", (req, res) => {
+    const { course_name, teacher_id } = req.body;
+
+    // 1. Validate Input
+    if (!course_name || !teacher_id) {
+        return res.json({
+            success: false,
+            message: "Missing data: Course Name or Teacher ID"
+        });
+    }
+
+    // 2. Check if teacher already has a course
+    db.query(
+        "SELECT id FROM courses WHERE teacher_id = ?",
+        [teacher_id],
+        (err, result) => {
+            if (err) {
+                console.error("❌ DB Check Error:", err);
+                return res.json({
+                    success: false,
+                    message: "Database error checking course"
+                });
+            }
+
+            if (result.length > 0) {
+                return res.json({
+                    success: false,
+                    message: "You have already added a course!"
+                });
+            }
+
+            // 3. Insert Course
+            db.query(
+                "INSERT INTO courses (course_name, teacher_id) VALUES (?, ?)",
+                [course_name, teacher_id],
+                err2 => {
+                    if (err2) {
+                        // THIS LOGS THE ERROR IN YOUR TERMINAL
+                        console.error("❌ SQL INSERT ERROR:", err2);
+                        
+                        return res.json({
+                            success: false,
+                            message: "Insert failed: " + err2.sqlMessage
+                        });
+                    }
+
+                    res.json({
+                        success: true,
+                        message: "Course added successfully"
+                    });
+                }
+            );
+        }
+    );
+});
+/* ================= COURSES ================= */
+app.get("/courses", (req, res) => {
+    db.query("SELECT * FROM courses", (err, result) => {
+        if (err) return res.json({ success: false });
+        res.json({ success: true, courses: result });
+    });
+});
+// ================= TEACHER COURSES =================
+app.get("/courses/teacher/:teacherId", (req, res) => {
+    const teacherId = req.params.teacherId;
+
+    db.query(
+        "SELECT * FROM courses WHERE teacher_id = ?",
+        [teacherId],
+        (err, result) => {
+            if (err) {
+                return res.json({ success: false });
+            }
+
+            res.json({
+                success: true,
+                courses: result
+            });
+        }
+    );
+});
+
+
+/* ================= STUDENT ENROLL COURSE (USING IDs) ================= */
+app.post("/student/select-course", (req, res) => {
+    const { student_email, course_id } = req.body;
+
+    if (!student_email || !course_id) {
+        return res.json({ success: false, message: "Missing data" });
+    }
+
+    // 1️⃣ Get student ID from email
+    db.query(
+        "SELECT id FROM student WHERE email = ?",
+        [student_email],
+        (err, studentResult) => {
+            if (err || studentResult.length === 0) {
+                return res.json({ success: false, message: "Student not found" });
+            }
+
+            const student_id = studentResult[0].id;
+
+            // 2️⃣ Check if already enrolled
+            db.query(
+                "SELECT id FROM student_courses WHERE student_id = ? AND course_id = ?",
+                [student_id, course_id],
+                (err, exist) => {
+                    if (exist.length > 0) {
+                        return res.json({ success: false, message: "Already enrolled" });
+                    }
+
+                    // 3️⃣ Insert enrollment
+                    db.query(
+                        "INSERT INTO student_courses (student_id, course_id) VALUES (?, ?)",
+                        [student_id, course_id],
+                        err => {
+                            if (err) {
+                                console.log(err);
+                                return res.json({ success: false });
+                            }
+                            res.json({ success: true });
+                        }
+                    );
+                }
+            );
+        }
+    );
+});
+/* ================= GET STUDENT COURSES ================= */
+app.get("/student/courses/:email", (req, res) => {
+    const email = req.params.email;
+
+    const sql = `
+        SELECT c.course_name
+        FROM student_courses sc
+        JOIN student s ON sc.student_id = s.id
+        JOIN courses c ON sc.course_id = c.id
+        WHERE s.email = ?
+    `;
+
+    db.query(sql, [email], (err, result) => {
+        if (err) return res.json({ success: false });
+        res.json({ success: true, courses: result });
+    });
+});
+
+/* ================= ASSIGNMENTS ================= */
+app.post("/assignment/add", (req, res) => {
+    const { title, description, course_id, teacher_name } = req.body;
+
+    if (!title || !course_id || !teacher_name) {
+        return res.json({ success: false, message: "Missing data" });
+    }
+
+    db.query(
+        "INSERT INTO assignments (title, description, course_id, teacher_name) VALUES (?, ?, ?, ?)",
+        [title, description, course_id, teacher_name],
+        err => {
+            if (err) {
+                console.log(err);
+                return res.json({ success: false });
+            }
+            res.json({ success: true });
+        }
+    );
+});
+
+/* ================= MARK ASSIGNMENT COMPLETE ================= */
+app.post("/assignment/complete", (req, res) => {
+    const { student_email, assignment_id } = req.body;
+
+    if (!student_email || !assignment_id) {
+        return res.json({ success: false, message: "Missing data" });
+    }
+
+    const query = "INSERT INTO assignment_completions (student_email, assignment_id) VALUES (?, ?)";
+
+    db.query(query, [student_email, assignment_id], (err) => {
+        if (err) {
+            // If error code is 1062, it means duplicate entry (already completed)
+            if (err.errno === 1062) {
+                return res.json({ success: false, message: "Already completed" });
+            }
+            console.error(err);
+            return res.json({ success: false, message: "Server error" });
+        }
+        res.json({ success: true, message: "Assignment marked as completed!" });
+    });
+});
+
+/* ================= CHECK COMPLETED STATUS ================= */
+// We update the existing GET assignments route to include completion status
+app.get("/assignments/student/:email", (req, res) => {
+    const email = req.params.email;
+
+    const sql = `
+        SELECT 
+            a.id, 
+            a.title, 
+            a.description, 
+            c.course_name, 
+            a.teacher_name,
+            CASE WHEN ac.id IS NOT NULL THEN 1 ELSE 0 END AS is_completed
+        FROM student s
+        JOIN student_courses sc ON s.id = sc.student_id
+        JOIN assignments a ON sc.course_id = a.course_id
+        JOIN courses c ON a.course_id = c.id
+        LEFT JOIN assignment_completions ac ON a.id = ac.assignment_id AND ac.student_email = s.email
+        WHERE s.email = ?
+    `;
+
+    db.query(sql, [email], (err, result) => {
+        if (err) return res.json({ success: false });
+        res.json({ success: true, assignments: result });
+    });
+});
+/* ================= NOTES ================= */
+/* ================= NOTES API (FINAL VERSION) ================= */
+app.post("/notes", (req, res) => {
+    console.log("📥 Incoming Note:", req.body); // Log what we receive
+
+    const { teacherName, content, course_id, description } = req.body;
+
+    // Validation
+    if (!teacherName || !content || !course_id || !description) {
+        console.log("❌ Missing Data");
+        return res.json({ success: false, message: "Missing fields" });
+    }
+
+    // Database Insert
+    const sql = "INSERT INTO notes (teacher_name, content, course_id, description) VALUES (?, ?, ?, ?)";
+    db.query(sql, [teacherName, content, course_id, description], (err, result) => {
+        if (err) {
+            console.error("❌ Database Error:", err.message);
+            return res.json({ success: false, message: "Database error" });
+        }
+        console.log("✅ Note Saved!");
+        res.json({ success: true });
+    });
+});
+// 2. Fetch Notes for a Specific Student (Filtered by Enrollment)
+// 2. Load Notes for Student (Updated to include Description)
+app.get("/notes/student/:email", (req, res) => {
+    const email = req.params.email;
+
+    // ✅ CHECK THIS LINE: We added 'n.description' here!
+    const sql = `
+        SELECT n.description, n.content, n.teacher_name, c.course_name, n.created_at
+        FROM notes n
+        JOIN courses c ON n.course_id = c.id
+        JOIN student_courses sc ON c.id = sc.course_id
+        JOIN student s ON sc.student_id = s.id
+        WHERE s.email = ?
+        ORDER BY n.created_at DESC
+    `;
+
+    db.query(sql, [email], (err, result) => {
+        if (err) {
+            console.error(err);
+            return res.json({ success: false });
+        }
+        res.json({ success: true, notes: result });
+    });
+});
+
+/* ================= SUBMIT ASSIGNMENT ================= */
+app.post("/assignment/submit", (req, res) => {
+    const { assignment_id, student_email, submission_text } = req.body;
+
+    if (!assignment_id || !student_email || !submission_text) {
+        return res.json({ success: false, message: "Missing data" });
+    }
+
+    // get student id
+    db.query(
+        "SELECT id FROM student WHERE email = ?",
+        [student_email],
+        (err, student) => {
+            if (err || student.length === 0) {
+                return res.json({ success: false });
+            }
+
+            const student_id = student[0].id;
+
+            db.query(
+                "INSERT INTO assignment_submissions (assignment_id, student_id, submission_text) VALUES (?, ?, ?)",
+                [assignment_id, student_id, submission_text],
+                err2 => {
+                    if (err2) {
+                        console.log(err2);
+                        return res.json({ success: false });
+                    }
+                    res.json({ success: true });
+                }
+            );
+        }
+    );
+});
+/* ================= VIEW SUBMISSIONS (TEACHER) ================= */
+app.get("/assignment/submissions/:teacherName", (req, res) => {
+    const teacherName = req.params.teacherName;
+
+    const sql = `
+        SELECT 
+            a.title,
+            s.name AS student_name,
+            s.email,
+            sub.submission_text,
+            sub.submitted_at
+        FROM assignments a
+        JOIN assignment_submissions sub ON a.id = sub.assignment_id
+        JOIN student s ON sub.student_id = s.id
+        WHERE a.teacher_name = ?
+        ORDER BY sub.submitted_at DESC
+    `;
+
+    db.query(sql, [teacherName], (err, result) => {
+        if (err) {
+            console.log(err);
+            return res.json({ success: false });
+        }
+
+        res.json({
+            success: true,
+            submissions: result
+        });
+    });
+});
+/* ================= GET STUDENTS FOR TEACHER ================= */
+app.get("/students/teacher/:teacherId", (req, res) => {
+    const teacherId = req.params.teacherId;
+
+    const sql = `
+        SELECT 
+            s.name AS student_name, 
+            s.email, 
+            c.course_name
+        FROM student s
+        JOIN student_courses sc ON s.id = sc.student_id
+        JOIN courses c ON sc.course_id = c.id
+        WHERE c.teacher_id = ?
+        ORDER BY c.course_name, s.name
+    `;
+
+    db.query(sql, [teacherId], (err, result) => {
+        if (err) {
+            console.error("SQL Error:", err);
+            return res.json({ success: false });
+        }
+        res.json({ success: true, students: result });
+    });
+});
+
+/* ================= LEADERBOARD API ================= */
+app.get("/leaderboard", (req, res) => {
+    // Counts completed assignments for each student
+    const sql = `
+        SELECT s.name, COUNT(ac.id) as score
+        FROM student s
+        JOIN assignment_completions ac ON s.email = ac.student_email
+        GROUP BY s.email, s.name
+        ORDER BY score DESC
+        LIMIT 10
+    `;
+
+    db.query(sql, (err, result) => {
+        if (err) {
+            console.error("Leaderboard Error:", err);
+            return res.json({ success: false });
+        }
+        res.json({ success: true, leaderboard: result });
+    });
+});
+/* ================= START SERVER ================= */
+app.listen(PORT, () => {
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
+});
